@@ -3,5 +3,14 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
   base: '/iglesias.github.io/',
-  plugins: [vue()]
+  plugins: [vue()],
+  build: {
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name].[ext]'
+      }
+    }
+  }
 })

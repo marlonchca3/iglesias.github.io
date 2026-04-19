@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "cp index.template.html index.html && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && cp dist/index.html index.html && cp dist/404.html 404.html && rm -rf assets && cp -r dist/assets assets && git add . && git commit -m 'Deploy to GitHub Pages' && git push origin main"
+    "deploy": "npm run build && cp dist/index.html index.html && cp dist/404.html 404.html && rm -rf assets && cp -r dist/assets assets && git add . && git commit -m 'Deploy to GitHub Pages' && git push origin gh-pages"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

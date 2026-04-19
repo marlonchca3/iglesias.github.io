@@ -150,47 +150,40 @@ export async function initializeChurches() {
 }
 
 // Agregar iglesia
-export async function addChurchToFirestore(church) {
-  try {
-    // Primero, obtener iglesias de localStorage (mucho más rápido)
-    const allChurches = getChurchesLocal()
-    const newId = Math.max(...allChurches.map(c => c.id || 0), 0) + 1
-    
-    const newChurch = {
-      id: newId,
-      name: church.name,
-      address: church.address,
-      lat: parseFloat(church.lat),
-      lng: parseFloat(church.lng),
-      source: church.source || 'Usuario',
-      schedules: {
-        sun: [],
-        mon: [],
-        tue: [],
-        wed: [],
-        thu: [],
-        fri: [],
-        sat: []
-      }
+export function addChurchToFirestore(church) {
+  // Primero, obtener iglesias de localStorage (síncrono - muy rápido)
+  const allChurches = getChurchesLocal()
+  const newId = Math.max(...allChurches.map(c => c.id || 0), 0) + 1
+  
+  const newChurch = {
+    id: newId,
+    name: church.name,
+    address: church.address,
+    lat: parseFloat(church.lat),
+    lng: parseFloat(church.lng),
+    source: church.source || 'Usuario',
+    schedules: {
+      sun: [],
+      mon: [],
+      tue: [],
+      wed: [],
+      thu: [],
+      fri: [],
+      sat: []
     }
-    
-    // Guardar en localStorage primero (inmediato)
-    allChurches.push(newChurch)
-    saveChurchesLocal(allChurches)
-    
-    // Intentar guardar en Firestore en paralelo (sin bloquear)
-    try {
-      await setDoc(doc(db, CHURCHES_COLLECTION, `church_${newId}`), newChurch)
-      console.log('Iglesia guardada en Firestore')
-    } catch (fsError) {
-      console.warn('Firestore no disponible, guardado en localStorage:', fsError.message)
-    }
-    
-    return newChurch
-  } catch (error) {
-    console.error('Error adding church:', error)
-    throw error
   }
+  
+  // Guardar en localStorage primero (inmediato, síncrono)
+  allChurches.push(newChurch)
+  saveChurchesLocal(allChurches)
+  
+  // Intentar guardar en Firestore en paralelo (sin bloquear ni esperar)
+  // Esto es fire-and-forget para no bloquear la UI
+  setDoc(doc(db, CHURCHES_COLLECTION, `church_${newId}`), newChurch)
+    .then(() => console.log('Iglesia guardada en Firestore'))
+    .catch(fsError => console.warn('Firestore no disponible:', fsError.message))
+  
+  return newChurch
 }
 
 // Actualizar iglesia

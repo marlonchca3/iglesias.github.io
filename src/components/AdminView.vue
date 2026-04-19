@@ -87,7 +87,7 @@ function resetForm() {
   }
 }
 
-async function submitForm() {
+function submitForm() {
   if (!formData.value.name || !formData.value.lat || !formData.value.lng) {
     alert('Por favor completa todos los campos requeridos')
     return
@@ -95,47 +95,29 @@ async function submitForm() {
 
   try {
     if (editingId.value) {
-      await updateChurchInFirestore(editingId.value, formData.value)
+      // Actualizar
+      const allChurches = getChurchesLocal()
+      const idx = allChurches.findIndex(c => c.id === editingId.value)
+      if (idx !== -1) {
+        allChurches[idx] = { ...allChurches[idx], ...formData.value }
+        saveChurchesLocal(allChurches)
+        // Intentar Firestore en paralelo (sin esperar)
+        updateChurchInFirestore(editingId.value, formData.value).catch(err => 
+          console.warn('Firestore update fallido:', err.message)
+        )
+      }
     } else {
-      await addChurchToFirestore(formData.value)
+      // Crear
+      addChurchToFirestore(formData.value)
     }
     
-    // Recargar desde localStorage (fallback más confiable)
+    // Recargar desde localStorage (ahora tiene los datos)
     churches.value = getChurchesLocal()
     showForm.value = false
     resetForm()
     alert('✅ Iglesia guardada exitosamente')
   } catch (err) {
-    // Incluso con error, guardar en localStorage
-    try {
-      const allChurches = getChurchesLocal()
-      if (editingId.value) {
-        const idx = allChurches.findIndex(c => c.id === editingId.value)
-        if (idx !== -1) {
-          allChurches[idx] = { ...allChurches[idx], ...formData.value }
-          saveChurchesLocal(allChurches)
-        }
-      } else {
-        const newId = Math.max(...allChurches.map(c => c.id || 0), 0) + 1
-        const newChurch = {
-          id: newId,
-          name: formData.value.name,
-          address: formData.value.address,
-          lat: parseFloat(formData.value.lat),
-          lng: parseFloat(formData.value.lng),
-          source: formData.value.source || 'Usuario',
-          schedules: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [], sat: [] }
-        }
-        allChurches.push(newChurch)
-        saveChurchesLocal(allChurches)
-      }
-      churches.value = getChurchesLocal()
-      showForm.value = false
-      resetForm()
-      alert('✅ Iglesia guardada en el navegador (localStorage)')
-    } catch (localErr) {
-      error.value = 'Error: ' + localErr.message
-    }
+    error.value = 'Error guardando iglesia: ' + err.message
   }
 }
 

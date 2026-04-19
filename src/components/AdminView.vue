@@ -6,6 +6,7 @@ const churches = ref(getChurches())
 const showForm = ref(false)
 const editingId = ref(null)
 const editingDay = ref(null)
+const fileInput = ref(null)
 
 const formData = ref({
   name: '',
@@ -120,6 +121,56 @@ function exportData() {
   a.click()
   URL.revokeObjectURL(url)
 }
+
+function importData() {
+  fileInput.value?.click()
+}
+
+function handleFileUpload(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target?.result)
+      if (!Array.isArray(data)) {
+        alert('El archivo debe contener un array de iglesias')
+        return
+      }
+      
+      // Validar estructura básica
+      const valid = data.every(church => 
+        church.id && 
+        church.name && 
+        church.lat !== undefined && 
+        church.lng !== undefined &&
+        church.schedules
+      )
+      
+      if (!valid) {
+        alert('El archivo tiene un formato incorrecto')
+        return
+      }
+      
+      if (confirm('¿Importar datos? Se sobrescribirán los datos actuales.')) {
+        // Guardar los datos importados
+        const success = localStorage.setItem('iglesias_callao_churches', JSON.stringify(data))
+        if (success !== undefined) {
+          churches.value = getChurches()
+          alert('✅ Datos importados exitosamente')
+        }
+      }
+    } catch (error) {
+      alert('Error al leer el archivo: ' + error.message)
+    }
+  }
+  reader.readAsText(file)
+  
+  // Limpiar el input
+  event.target.value = ''
+}
+
 </script>
 
 <template>
@@ -127,7 +178,15 @@ function exportData() {
     <header class="admin-header">
       <h1>🛠️ Panel de Administración</h1>
       <div class="admin-actions">
-        <button class="btn-secondary" @click="exportData">Descargar datos</button>
+        <button class="btn-secondary" @click="exportData">⬇️ Descargar datos</button>
+        <button class="btn-secondary" @click="importData">⬆️ Cargar datos</button>
+        <input 
+          ref="fileInput" 
+          type="file" 
+          accept=".json" 
+          style="display: none"
+          @change="handleFileUpload"
+        >
         <button class="btn-secondary" @click="handleReset">Restaurar predeterminados</button>
         <button class="btn-primary" @click="openForm">+ Agregar iglesia</button>
       </div>

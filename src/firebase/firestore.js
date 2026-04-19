@@ -155,8 +155,11 @@ export async function initializeChurches() {
 
 // Agregar iglesia
 export function addChurchToFirestore(church) {
-  // Primero, obtener iglesias de localStorage (síncrono - muy rápido)
-  const allChurches = getChurchesLocal()
+  // Primero, obtener iglesias de localStorage como copia (síncrono - muy rápido)
+  let allChurches = getChurchesLocal()
+  // Hacer una copia para no modificar DEFAULT_CHURCHES directamente
+  allChurches = JSON.parse(JSON.stringify(allChurches))
+  
   const newId = Math.max(...allChurches.map(c => c.id || 0), 0) + 1
   
   const newChurch = {

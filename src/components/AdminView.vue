@@ -16,11 +16,20 @@ const churches = ref([])
 const showForm = ref(false)
 const editingId = ref(null)
 const editingDay = ref(null)
+const editingFieldId = ref(null)
 const fileInput = ref(null)
 const loading = ref(true)
 const error = ref('')
 
 const formData = ref({
+  name: '',
+  address: '',
+  lat: '',
+  lng: '',
+  source: ''
+})
+
+const editFieldData = ref({
   name: '',
   address: '',
   lat: '',
@@ -61,6 +70,54 @@ function editChurch(church) {
   editingId.value = church.id
   formData.value = { ...church }
   showForm.value = true
+}
+
+function startEditField(church, field) {
+  editingFieldId.value = `${church.id}-${field}`
+  if (field === 'coords') {
+    editFieldData.value.lat = church.lat
+    editFieldData.value.lng = church.lng
+  } else {
+    editFieldData.value[field] = church[field]
+  }
+}
+
+function cancelEditField() {
+  editingFieldId.value = null
+  editFieldData.value = { name: '', address: '', lat: '', lng: '', source: '' }
+}
+
+async function saveEditField(church, field) {
+  const newValue = editFieldData.value[field]
+  
+  try {
+    // Actualizar en localStorage
+    const allChurches = getChurchesLocal()
+    const idx = allChurches.findIndex(c => c.id === church.id)
+    if (idx !== -1) {
+      // Si es coordenadas, guardar ambas
+      if (field === 'coords') {
+        allChurches[idx].lat = editFieldData.value.lat
+        allChurches[idx].lng = editFieldData.value.lng
+        saveChurchesLocal(allChurches)
+        updateChurchInFirestore(church.id, { lat: editFieldData.value.lat, lng: editFieldData.value.lng }).catch(err =>
+          console.warn('Firestore update fallido:', err.message)
+        )
+        churches.value[idx].lat = editFieldData.value.lat
+        churches.value[idx].lng = editFieldData.value.lng
+      } else {
+        allChurches[idx][field] = newValue
+        saveChurchesLocal(allChurches)
+        updateChurchInFirestore(church.id, { [field]: newValue }).catch(err =>
+          console.warn('Firestore update fallido:', err.message)
+        )
+        churches.value[idx][field] = newValue
+      }
+      editingFieldId.value = null
+    }
+  } catch (err) {
+    error.value = `Error guardando ${field}: ${err.message}`
+  }
 }
 
 function resetForm() {
@@ -317,13 +374,87 @@ async function handleLogout() {
       <h2>Iglesias ({{ churches.length }})</h2>
       <div v-for="church in churches" :key="church.id" class="church-card">
         <div class="church-header">
-          <div>
-            <h3>{{ church.name }}</h3>
-            <p class="address">📍 {{ church.address }}</p>
-            <p class="coords">Lat: {{ church.lat }}, Lng: {{ church.lng }}</p>
+          <div class="church-info">
+            <!-- Nombre editable -->
+            <div v-if="editingFieldId === `${church.id}-name`" class="edit-field">
+              <input 
+                v-model="editFieldData.name" 
+                type="text"
+                @keyup.enter="saveEditField(church, 'name')"
+                @keyup.escape="cancelEditField()"
+                autofocus
+              >
+              <button class="btn-save" @click="saveEditField(church, 'name')">✓</button>
+              <button class="btn-cancel" @click="cancelEditField()">✕</button>
+            </div>
+            <h3 v-else @click="startEditField(church, 'name')" class="editable-field">
+              {{ church.name }} <span class="edit-hint">📝</span>
+            </h3>
+
+            <!-- Dirección editable -->
+            <div v-if="editingFieldId === `${church.id}-address`" class="edit-field">
+              <input 
+                v-model="editFieldData.address" 
+                type="text"
+                @keyup.enter="saveEditField(church, 'address')"
+                @keyup.escape="cancelEditField()"
+                autofocus
+              >
+              <button class="btn-save" @click="saveEditField(church, 'address')">✓</button>
+              <button class="btn-cancel" @click="cancelEditField()">✕</button>
+            </div>
+            <p v-else class="address editable-field" @click="startEditField(church, 'address')">
+              📍 {{ church.address }} <span class="edit-hint">📝</span>
+            </p>
+
+            <!-- Latitud y Longitud editables -->
+            <div v-if="editingFieldId === `${church.id}-coords`" class="coords-edit">
+              <div class="coord-input">
+                <label>Lat:</label>
+                <input 
+                  v-model.number="editFieldData.lat" 
+                  type="number"
+                  step="0.0001"
+                  @keyup.escape="cancelEditField()"
+                >
+              </div>
+              <div class="coord-input">
+                <label>Lng:</label>
+                <input 
+                  v-model.number="editFieldData.lng" 
+                  type="number"
+                  step="0.0001"
+                  @keyup.escape="cancelEditField()"
+                >
+              </div>
+              <button class="btn-save" @click="saveEditField(church, 'coords')">✓</button>
+              <button class="btn-cancel" @click="cancelEditField()">✕</button>
+            </div>
+            <p v-else class="coords editable-field" @click="startEditField(church, 'coords')">
+              Lat: {{ church.lat }}, Lng: {{ church.lng }} <span class="edit-hint">📝</span>
+            </p>
+
+            <!-- Fuente editable -->
+            <div v-if="editingFieldId === `${church.id}-source`" class="edit-field">
+              <input 
+                v-model="editFieldData.source" 
+                type="text"
+                placeholder="Fuente (opcional)"
+                @keyup.enter="saveEditField(church, 'source')"
+                @keyup.escape="cancelEditField()"
+                autofocus
+              >
+              <button class="btn-save" @click="saveEditField(church, 'source')">✓</button>
+              <button class="btn-cancel" @click="cancelEditField()">✕</button>
+            </div>
+            <p v-else-if="church.source" class="source editable-field" @click="startEditField(church, 'source')">
+              📋 {{ church.source }} <span class="edit-hint">📝</span>
+            </p>
+            <p v-else class="source-empty editable-field" @click="startEditField(church, 'source')">
+              📋 Sin fuente <span class="edit-hint">📝</span>
+            </p>
           </div>
           <div class="church-actions">
-            <button class="btn-small" @click="editChurch(church)">Editar</button>
             <button class="btn-small btn-danger" @click="removeChurch(church.id)">Eliminar</button>
           </div>
         </div>
@@ -662,6 +793,131 @@ async function handleLogout() {
   background: rgba(56, 189, 248, 0.1);
 }
 
+.church-info {
+  flex: 1;
+}
+
+.editable-field {
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 6px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.editable-field:hover {
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.edit-hint {
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-size: 0.8em;
+  margin-left: 4px;
+}
+
+.editable-field:hover .edit-hint {
+  opacity: 1;
+}
+
+.edit-field {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 4px 0;
+}
+
+.edit-field input {
+  flex: 1;
+  padding: 8px;
+  background: #1e293b;
+  border: 2px solid #38bdf8;
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+
+.edit-field input:focus {
+  outline: none;
+  border-color: #22c55e;
+}
+
+.coords-edit {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin: 8px 0;
+  flex-wrap: wrap;
+}
+
+.coord-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.coord-input label {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  font-weight: 600;
+  min-width: 30px;
+}
+
+.coord-input input {
+  width: 120px;
+  padding: 6px;
+  background: #1e293b;
+  border: 2px solid #38bdf8;
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.coord-input input:focus {
+  outline: none;
+  border-color: #22c55e;
+}
+
+.btn-save, .btn-cancel {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.btn-save {
+  background: #22c55e;
+  color: #052e16;
+}
+
+.btn-save:hover {
+  background: #16a34a;
+}
+
+.btn-cancel {
+  background: #ef4444;
+  color: white;
+}
+
+.btn-cancel:hover {
+  background: #dc2626;
+}
+
+.source {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.source-empty {
+  color: #64748b;
+  font-size: 0.9rem;
+  font-style: italic;
+}
+
 @media (max-width: 768px) {
   .admin-header {
     flex-direction: column;
@@ -687,6 +943,19 @@ async function handleLogout() {
 
   .schedules-edit {
     grid-template-columns: 1fr;
+  }
+
+  .coords-edit {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .coord-input {
+    width: 100%;
+  }
+
+  .coord-input input {
+    width: 100%;
   }
 }
 </style>

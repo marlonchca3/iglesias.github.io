@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
-  base: '/iglesias.github.io/',
+  base: process.env.NODE_ENV === 'production' ? '/iglesias.github.io/' : '/',
   plugins: [vue()],
   build: {
     rollupOptions: {

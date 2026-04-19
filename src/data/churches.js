@@ -1,4 +1,4 @@
-export const churches = [
+export const DEFAULT_CHURCHES = [
   {
     id: 1,
     name: 'Basílica Catedral del Callao',

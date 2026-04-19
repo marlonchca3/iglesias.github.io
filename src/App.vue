@@ -1,7 +1,16 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import MapView from './components/MapView.vue'
-import { churches } from './data/churches'
+import AdminView from './components/AdminView.vue'
+import LoginView from './components/LoginView.vue'
+import { getChurchesFromFirestore, getChurchesLocal, startDeviceSyncPolling, initStorageListener, initializeChurches } from './firebase/firestore'
+import { onAuthStateChange } from './firebase/auth'
+
+const churches = ref([])
+const currentUser = ref(null)
+const authLoading = ref(true)
+const showLoginPrompt = ref(false)
+let syncInterval = null
 
 const userPosition = ref(null)
 const errorMessage = ref('')
@@ -177,30 +186,70 @@ function startTracking() {
 }
 
 onMounted(() => {
+  // Inicializar datos
+  initializeChurches()
+  
+  // Cargar iglesias inicialmente
+  getChurchesFromFirestore()
+    .then(data => {
+      churches.value = data
+    })
+    .catch(err => {
+      console.error('Error loading churches:', err)
+      churches.value = getChurchesLocal()
+    })
+
+  // Configurar listener de autenticación
+  onAuthStateChange((user) => {
+    currentUser.value = user
+    authLoading.value = false
+  })
+
+  // Configurar sincronización entre pestañas
+  initStorageListener()
+
+  // Iniciar polling para sincronizar con otros dispositivos (cada 5 segundos)
+  syncInterval = startDeviceSyncPolling((updatedChurches) => {
+    churches.value = updatedChurches
+  })
+
   startTracking()
 })
 
 onBeforeUnmount(() => {
   if (watchId.value !== null) navigator.geolocation.clearWatch(watchId.value)
+  if (syncInterval) clearInterval(syncInterval)
 })
 </script>
 
 <template>
   <div class="page">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">Vue + geolocalización + alertas</p>
-        <h1>Misas Callao</h1>
-        <p class="subtitle">
-          Encuentra la iglesia más cercana y mira sus horarios de misa según tu ubicación actual.
-        </p>
-      </div>
+    <!-- Pantalla de login en modal si se hace clic en Admin -->
+    <LoginView 
+      v-if="showLoginPrompt" 
+      @logged-in="currentUser = $event; showLoginPrompt = false" 
+    />
 
-      <div class="actions">
-        <button class="primary" @click="startTracking">Actualizar ubicación</button>
-        <button class="secondary" @click="requestNotificationPermission">Activar avisos</button>
-      </div>
-    </header>
+    <!-- Panel de admin si está autenticado -->
+    <AdminView v-else-if="currentUser && !authLoading" @logout="currentUser = null" />
+
+    <!-- Contenido principal (visible siempre que no esté en admin) -->
+    <template v-else>
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Vue + geolocalización + alertas</p>
+          <h1>Misas Callao</h1>
+          <p class="subtitle">
+            Encuentra la iglesia más cercana y mira sus horarios de misa según tu ubicación actual.
+          </p>
+        </div>
+
+        <div class="actions">
+          <button class="primary" @click="startTracking">Actualizar ubicación</button>
+          <button class="secondary" @click="requestNotificationPermission">Activar avisos</button>
+          <button class="secondary admin-btn" @click="showLoginPrompt = true">⚙️ Admin</button>
+        </div>
+      </header>
 
     <section class="grid top-grid">
       <article class="card status-card">
@@ -269,5 +318,6 @@ onBeforeUnmount(() => {
         <li>Usar Web Push desde servidor para recordatorios programados.</li>
       </ol>
     </section>
+    </template>
   </div>
 </template>

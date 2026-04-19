@@ -2,9 +2,13 @@
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import MapView from './components/MapView.vue'
 import AdminView from './components/AdminView.vue'
-import { getChurches } from './utils/churchStorage'
+import LoginView from './components/LoginView.vue'
+import { getChurchesFromFirestore, getChurchesLocal } from './firebase/firestore'
+import { onAuthStateChange } from './firebase/auth'
 
-const churches = computed(() => getChurches())
+const churches = ref([])
+const currentUser = ref(null)
+const authLoading = ref(true)
 
 const userPosition = ref(null)
 const errorMessage = ref('')
@@ -12,7 +16,6 @@ const permissionState = ref('pendiente')
 const notifyEnabled = ref(false)
 const watchId = ref(null)
 const alertedKey = ref('')
-const isAdmin = ref(false)
 
 const weekKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 const weekNames = {
@@ -185,6 +188,23 @@ function startTracking() {
 }
 
 onMounted(() => {
+  // Cargar iglesias desde Firestore
+  getChurchesFromFirestore()
+    .then(data => {
+      churches.value = data
+    })
+    .catch(err => {
+      console.error('Error loading churches:', err)
+      // Fallback a localStorage si Firestore falla
+      churches.value = getChurchesLocal()
+    })
+
+  // Configurar listener de autenticación
+  onAuthStateChange((user) => {
+    currentUser.value = user
+    authLoading.value = false
+  })
+
   startTracking()
 })
 
@@ -195,10 +215,13 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page">
-    <!-- Panel de admin -->
-    <AdminView v-if="isAdmin" />
+    <!-- Pantalla de login si no está autenticado -->
+    <LoginView v-if="!authLoading && !currentUser" @logged-in="currentUser = $event" />
 
-    <!-- Contenido principal -->
+    <!-- Panel de admin si está autenticado -->
+    <AdminView v-else-if="!authLoading && currentUser" @logout="currentUser = null" />
+
+    <!-- Contenido principal (cualquiera puede ver) -->
     <template v-else>
       <header class="hero">
         <div>

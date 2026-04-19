@@ -1,12 +1,24 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { getChurches, addChurch, updateChurch, deleteChurch, resetToDefaults } from '../utils/churchStorage'
+import { ref, computed, onMounted } from 'vue'
+import { 
+  getChurchesFromFirestore, 
+  addChurchToFirestore, 
+  updateChurchInFirestore, 
+  deleteChurchFromFirestore,
+  getChurchesLocal,
+  saveChurchesLocal
+} from '../firebase/firestore'
+import { logoutAdmin } from '../firebase/auth'
 
-const churches = ref(getChurches())
+const emit = defineEmits(['logout'])
+
+const churches = ref([])
 const showForm = ref(false)
 const editingId = ref(null)
 const editingDay = ref(null)
 const fileInput = ref(null)
+const loading = ref(true)
+const error = ref('')
 
 const formData = ref({
   name: '',
@@ -27,6 +39,16 @@ const dayNames = {
 }
 
 const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+
+onMounted(async () => {
+  try {
+    churches.value = await getChurchesFromFirestore()
+    loading.value = false
+  } catch (err) {
+    error.value = 'Error cargando iglesias: ' + err.message
+    loading.value = false
+  }
+})
 
 function openForm() {
   showForm.value = true
@@ -50,27 +72,37 @@ function resetForm() {
   }
 }
 
-function submitForm() {
+async function submitForm() {
   if (!formData.value.name || !formData.value.lat || !formData.value.lng) {
     alert('Por favor completa todos los campos requeridos')
     return
   }
 
-  if (editingId.value) {
-    updateChurch(editingId.value, formData.value)
-  } else {
-    addChurch(formData.value)
+  try {
+    if (editingId.value) {
+      await updateChurchInFirestore(editingId.value, formData.value)
+    } else {
+      await addChurchToFirestore(formData.value)
+    }
+    
+    churches.value = await getChurchesFromFirestore()
+    showForm.value = false
+    resetForm()
+    alert('✅ Iglesia guardada exitosamente')
+  } catch (err) {
+    error.value = 'Error guardando iglesia: ' + err.message
   }
-  
-  churches.value = getChurches()
-  showForm.value = false
-  resetForm()
 }
 
-function removeChurch(id) {
+async function removeChurch(id) {
   if (confirm('¿Estás seguro de que deseas eliminar esta iglesia?')) {
-    deleteChurch(id)
-    churches.value = getChurches()
+    try {
+      await deleteChurchFromFirestore(id)
+      churches.value = await getChurchesFromFirestore()
+      alert('✅ Iglesia eliminada')
+    } catch (err) {
+      error.value = 'Error eliminando iglesia: ' + err.message
+    }
   }
 }
 
@@ -82,32 +114,33 @@ function closeScheduleEditor() {
   editingId.value = null
 }
 
-function addSchedule(churchId, day) {
+async function addSchedule(churchId, day) {
   const time = prompt(`Agregar hora para ${dayNames[day]}:`, '18:00')
   if (time && /^\d{2}:\d{2}$/.test(time)) {
     const church = churches.value.find(c => c.id === churchId)
     if (!church.schedules[day].includes(time)) {
       church.schedules[day].push(time)
       church.schedules[day].sort()
-      updateChurch(churchId, church)
-      churches.value = getChurches()
+      try {
+        await updateChurchInFirestore(churchId, church)
+        churches.value = await getChurchesFromFirestore()
+      } catch (err) {
+        error.value = 'Error actualizando horario: ' + err.message
+      }
     }
   } else if (time) {
     alert('Formato inválido. Usa HH:MM (ej: 18:00)')
   }
 }
 
-function removeSchedule(churchId, day, time) {
+async function removeSchedule(churchId, day, time) {
   const church = churches.value.find(c => c.id === churchId)
   church.schedules[day] = church.schedules[day].filter(t => t !== time)
-  updateChurch(churchId, church)
-  churches.value = getChurches()
-}
-
-function handleReset() {
-  if (confirm('¿Restaurar datos por defecto? Se perderán todos los cambios.')) {
-    resetToDefaults()
-    churches.value = getChurches()
+  try {
+    await updateChurchInFirestore(churchId, church)
+    churches.value = await getChurchesFromFirestore()
+  } catch (err) {
+    error.value = 'Error eliminando horario: ' + err.message
   }
 }
 
@@ -126,12 +159,12 @@ function importData() {
   fileInput.value?.click()
 }
 
-function handleFileUpload(event) {
+async function handleFileUpload(event) {
   const file = event.target.files?.[0]
   if (!file) return
 
   const reader = new FileReader()
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
       const data = JSON.parse(e.target?.result)
       if (!Array.isArray(data)) {
@@ -154,15 +187,18 @@ function handleFileUpload(event) {
       }
       
       if (confirm('¿Importar datos? Se sobrescribirán los datos actuales.')) {
-        // Guardar los datos importados
-        const success = localStorage.setItem('iglesias_callao_churches', JSON.stringify(data))
-        if (success !== undefined) {
-          churches.value = getChurches()
+        try {
+          // Guardar en localStorage como respaldo
+          saveChurchesLocal(data)
+          // Recargar desde Firestore
+          churches.value = await getChurchesFromFirestore()
           alert('✅ Datos importados exitosamente')
+        } catch (err) {
+          error.value = 'Error importando datos: ' + err.message
         }
       }
-    } catch (error) {
-      alert('Error al leer el archivo: ' + error.message)
+    } catch (err) {
+      alert('Error al leer el archivo: ' + err.message)
     }
   }
   reader.readAsText(file)
@@ -171,12 +207,30 @@ function handleFileUpload(event) {
   event.target.value = ''
 }
 
+async function handleLogout() {
+  if (confirm('¿Cerrar sesión?')) {
+    try {
+      await logoutAdmin()
+      emit('logout')
+    } catch (err) {
+      error.value = 'Error al cerrar sesión: ' + err.message
+    }
+  }
+}
+
 </script>
 
 <template>
   <div class="admin">
     <header class="admin-header">
-      <h1>🛠️ Panel de Administración</h1>
+      <div class="header-content">
+        <h1>🛠️ Panel de Administración</h1>
+        <button class="btn-logout" @click="handleLogout">🚪 Cerrar sesión</button>
+      </div>
+      <div v-if="error" class="error-message">
+        ⚠️ {{ error }}
+        <button @click="error = ''" class="close-error">✕</button>
+      </div>
       <div class="admin-actions">
         <button class="btn-secondary" @click="exportData">⬇️ Descargar datos</button>
         <button class="btn-secondary" @click="importData">⬆️ Cargar datos</button>
@@ -187,10 +241,14 @@ function handleFileUpload(event) {
           style="display: none"
           @change="handleFileUpload"
         >
-        <button class="btn-secondary" @click="handleReset">Restaurar predeterminados</button>
         <button class="btn-primary" @click="openForm">+ Agregar iglesia</button>
       </div>
     </header>
+
+    <!-- Cargando -->
+    <div v-if="loading" class="loading">
+      ⏳ Cargando iglesias...
+    </div>
 
     <!-- Formulario para agregar/editar -->
     <div v-if="showForm" class="form-section">

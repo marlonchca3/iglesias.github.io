@@ -239,7 +239,9 @@ export async function deleteChurchFromFirestore(id) {
 export function getChurchesLocal() {
   try {
     const stored = localStorage.getItem('iglesias_callao_churches')
-    return stored ? JSON.parse(stored) : DEFAULT_CHURCHES
+    const parsed = stored ? JSON.parse(stored) : []
+    // Si localStorage está vacío o es un array vacío, usar DEFAULT_CHURCHES
+    return (parsed && parsed.length > 0) ? parsed : DEFAULT_CHURCHES
   } catch {
     return DEFAULT_CHURCHES
   }

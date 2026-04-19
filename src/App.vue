@@ -223,10 +223,10 @@ onBeforeUnmount(() => {
     />
 
     <!-- Panel de admin si está autenticado -->
-    <AdminView v-if="!authLoading && currentUser" @logout="currentUser = null" />
+    <AdminView v-else-if="currentUser && !authLoading" @logout="currentUser = null" />
 
-    <!-- Contenido principal (siempre visible si no está en admin) -->
-    <template v-if="!currentUser || authLoading">
+    <!-- Contenido principal (visible siempre que no esté en admin) -->
+    <template v-else>
       <header class="hero">
         <div>
           <p class="eyebrow">Vue + geolocalización + alertas</p>

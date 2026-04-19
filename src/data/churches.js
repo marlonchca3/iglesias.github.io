@@ -18,10 +18,10 @@ export const DEFAULT_CHURCHES = [
   },
   {
     id: 2,
-    name: 'Parroquia Santa Rosa',
+    name: 'Parroquia Santa Ana',
     address: 'Callao, Perú',
-    lat: -12.0468,
-    lng: -77.1288,
+    lat: -12.0408,
+    lng: -77.1246,
     source: 'Diócesis del Callao',
     schedules: {
       mon: ['19:00'],

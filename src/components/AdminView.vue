@@ -1,12 +1,14 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { getChurchesLocal, saveChurchesLocal, updateChurchInFirestore, deleteChurchFromFirestore } from '../firebase/firestore'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { getChurchesLocal, saveChurchesLocal, updateChurchInFirestore, deleteChurchFromFirestore, getLastUpdate } from '../firebase/firestore'
 import { logoutAdmin } from '../firebase/auth'
 
 const emit = defineEmits(['logout'])
 const churches = ref([])
 const loading = ref(true)
 const error = ref('')
+let syncInterval = null
+let lastSyncTime = 0
 
 const dayNames = {
   sun: 'Domingo', mon: 'Lunes', tue: 'Martes', wed: 'Miércoles',
@@ -14,9 +16,29 @@ const dayNames = {
 }
 const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 
+function refreshChurches() {
+  const currentTime = getLastUpdate()
+  if (currentTime > lastSyncTime) {
+    lastSyncTime = currentTime
+    churches.value = getChurchesLocal()
+  }
+}
+
 onMounted(() => {
   churches.value = getChurchesLocal()
+  lastSyncTime = getLastUpdate()
   loading.value = false
+  
+  // Sincronizar cada 2 segundos para detectar cambios de otros dispositivos
+  syncInterval = setInterval(refreshChurches, 2000)
+  
+  // También escuchar eventos de storage para cambios en otras pestañas
+  window.addEventListener('storage', refreshChurches)
+})
+
+onBeforeUnmount(() => {
+  if (syncInterval) clearInterval(syncInterval)
+  window.removeEventListener('storage', refreshChurches)
 })
 
 async function removeChurch(id) {

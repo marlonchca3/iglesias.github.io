@@ -1,12 +1,13 @@
 <script setup>
 import { ref } from 'vue'
-import { loginAdmin, logoutAdmin } from '../firebase/auth'
+import { loginAdmin, loginWithGoogle } from '../firebase/auth'
 
 const emit = defineEmits(['logged-in', 'logged-out'])
 
 const email = ref('')
 const password = ref('')
 const loading = ref(false)
+const googleLoading = ref(false)
 const error = ref('')
 const showPassword = ref(false)
 
@@ -31,9 +32,18 @@ async function handleLogin() {
   }
 }
 
-function handleLogout() {
-  logoutAdmin()
-  emit('logged-out')
+async function handleGoogleLogin() {
+  googleLoading.value = true
+  error.value = ''
+
+  try {
+    const user = await loginWithGoogle()
+    emit('logged-in', user)
+  } catch (err) {
+    error.value = err.message
+  } finally {
+    googleLoading.value = false
+  }
 }
 
 function handleKeyPress(e) {
@@ -95,6 +105,22 @@ function handleKeyPress(e) {
           :disabled="loading"
         >
           {{ loading ? 'Ingresando...' : 'Ingresar' }}
+        </button>
+
+        <div class="divider">O</div>
+
+        <button 
+          type="button" 
+          class="btn-google"
+          @click="handleGoogleLogin"
+          :disabled="googleLoading"
+        >
+          <svg class="google-icon" viewBox="0 0 24 24" width="20" height="20">
+            <path fill="#4285F4" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+            <path fill="#fff" d="M12 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3z"/>
+            <path fill="#fff" d="M12 13c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/>
+          </svg>
+          {{ googleLoading ? 'Conectando...' : 'Continuar con Google' }}
         </button>
       </form>
 
@@ -239,6 +265,63 @@ function handleKeyPress(e) {
 .btn-login:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 16px 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(148, 163, 184, 0.3);
+}
+
+.divider::before {
+  margin-right: 12px;
+}
+
+.divider::after {
+  margin-left: 12px;
+}
+
+.btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: #ffffff;
+  color: #1f2937;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-google:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #d1d5db;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.btn-google:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.google-icon {
+  width: 20px;
+  height: 20px;
 }
 
 .login-footer {

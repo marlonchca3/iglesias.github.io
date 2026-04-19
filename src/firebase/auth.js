@@ -1,13 +1,25 @@
 import { 
   signInWithEmailAndPassword, 
   signOut,
-  onAuthStateChanged
+  onAuthStateChanged,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth'
 import { auth } from './config'
 
 export async function loginAdmin(email, password) {
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
+    return userCredential.user
+  } catch (error) {
+    throw new Error(getErrorMessage(error.code))
+  }
+}
+
+export async function loginWithGoogle() {
+  try {
+    const provider = new GoogleAuthProvider()
+    const userCredential = await signInWithPopup(auth, provider)
     return userCredential.user
   } catch (error) {
     throw new Error(getErrorMessage(error.code))

@@ -9,6 +9,7 @@ import { onAuthStateChange } from './firebase/auth'
 const churches = ref([])
 const currentUser = ref(null)
 const authLoading = ref(true)
+const showLoginPrompt = ref(false)
 
 const userPosition = ref(null)
 const errorMessage = ref('')
@@ -215,8 +216,11 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page">
-    <!-- Pantalla de login si no está autenticado -->
-    <LoginView v-if="!authLoading && !currentUser" @logged-in="currentUser = $event" />
+    <!-- Pantalla de login si se hace clic en Admin o si no está autenticado -->
+    <LoginView 
+      v-if="showLoginPrompt || (!authLoading && !currentUser)" 
+      @logged-in="currentUser = $event; showLoginPrompt = false" 
+    />
 
     <!-- Panel de admin si está autenticado -->
     <AdminView v-else-if="!authLoading && currentUser" @logout="currentUser = null" />
@@ -235,7 +239,7 @@ onBeforeUnmount(() => {
         <div class="actions">
           <button class="primary" @click="startTracking">Actualizar ubicación</button>
           <button class="secondary" @click="requestNotificationPermission">Activar avisos</button>
-          <button class="secondary admin-btn" @click="isAdmin = true">⚙️ Admin</button>
+          <button class="secondary admin-btn" @click="showLoginPrompt = true">⚙️ Admin</button>
         </div>
       </header>
 

@@ -2,14 +2,14 @@ import { initializeApp } from 'firebase/app'
 import { getAuth, onAuthStateChanged } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 
-// ⚠️ IMPORTANTE: Reemplaza estas credenciales con las tuyas de Firebase Console
+// Firebase configuration for iglesias-app-d4dad
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDDJPSWkIqvOb3CWYhqHPvUSFe7eXxHksA",
+  authDomain: "iglesias-app-d4dad.firebaseapp.com",
+  projectId: "iglesias-app-d4dad",
+  storageBucket: "iglesias-app-d4dad.firebasestorage.app",
+  messagingSenderId: "1040336104078",
+  appId: "1:1040336104078:web:0076dea370482f704177df"
 }
 
 // Inicializar Firebase

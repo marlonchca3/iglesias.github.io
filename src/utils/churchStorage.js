@@ -92,8 +92,29 @@ const STORAGE_KEY = 'iglesias_callao_churches'
 export function getChurches() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY)
-    return stored ? JSON.parse(stored) : DEFAULT_CHURCHES
-  } catch {
+    if (!stored) return DEFAULT_CHURCHES
+    
+    const parsed = JSON.parse(stored)
+    // Validar que es un array válido con iglesias
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return DEFAULT_CHURCHES
+    }
+    
+    // Validar que cada iglesia tiene las propiedades necesarias
+    const valid = parsed.every(church => 
+      church && 
+      typeof church === 'object' && 
+      church.id && 
+      church.name && 
+      church.lat !== undefined && 
+      church.lng !== undefined &&
+      church.schedules &&
+      typeof church.schedules === 'object'
+    )
+    
+    return valid ? parsed : DEFAULT_CHURCHES
+  } catch (error) {
+    console.error('Error loading churches:', error)
     return DEFAULT_CHURCHES
   }
 }

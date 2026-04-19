@@ -64,8 +64,12 @@ function formatTime(date) {
 const todayKey = computed(() => weekKeys[new Date().getDay()])
 
 const churchesWithDistance = computed(() => {
-  if (!userPosition.value) return churches
-  return churches
+  const churchList = churches.value || []
+  if (!Array.isArray(churchList) || churchList.length === 0) return []
+  if (!userPosition.value) return churchList
+  
+  return churchList
+    .filter(church => church && church.id && church.lat !== undefined && church.lng !== undefined)
     .map(church => ({
       ...church,
       distance: distanceMeters(

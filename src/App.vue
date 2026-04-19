@@ -1,7 +1,10 @@
 <script setup>
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import MapView from './components/MapView.vue'
-import { churches } from './data/churches'
+import AdminView from './components/AdminView.vue'
+import { getChurches } from './utils/churchStorage'
+
+const churches = computed(() => getChurches())
 
 const userPosition = ref(null)
 const errorMessage = ref('')
@@ -9,6 +12,7 @@ const permissionState = ref('pendiente')
 const notifyEnabled = ref(false)
 const watchId = ref(null)
 const alertedKey = ref('')
+const isAdmin = ref(false)
 
 const weekKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 const weekNames = {
@@ -187,20 +191,26 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">Vue + geolocalización + alertas</p>
-        <h1>Misas Callao</h1>
-        <p class="subtitle">
-          Encuentra la iglesia más cercana y mira sus horarios de misa según tu ubicación actual.
-        </p>
-      </div>
+    <!-- Panel de admin -->
+    <AdminView v-if="isAdmin" />
 
-      <div class="actions">
-        <button class="primary" @click="startTracking">Actualizar ubicación</button>
-        <button class="secondary" @click="requestNotificationPermission">Activar avisos</button>
-      </div>
-    </header>
+    <!-- Contenido principal -->
+    <template v-else>
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Vue + geolocalización + alertas</p>
+          <h1>Misas Callao</h1>
+          <p class="subtitle">
+            Encuentra la iglesia más cercana y mira sus horarios de misa según tu ubicación actual.
+          </p>
+        </div>
+
+        <div class="actions">
+          <button class="primary" @click="startTracking">Actualizar ubicación</button>
+          <button class="secondary" @click="requestNotificationPermission">Activar avisos</button>
+          <button class="secondary admin-btn" @click="isAdmin = true">⚙️ Admin</button>
+        </div>
+      </header>
 
     <section class="grid top-grid">
       <article class="card status-card">
@@ -269,5 +279,6 @@ onBeforeUnmount(() => {
         <li>Usar Web Push desde servidor para recordatorios programados.</li>
       </ol>
     </section>
+    </template>
   </div>
 </template>

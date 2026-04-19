@@ -124,3 +124,13 @@ h3 { margin-bottom: 8px; }
 
   .hero { align-items: flex-start; }
 }
+
+.admin-btn {
+  background: rgba(99, 102, 241, 0.2) !important;
+  border-color: #6366f1 !important;
+  color: #a5b4fc !important;
+}
+
+.admin-btn:hover {
+  background: rgba(99, 102, 241, 0.3) !important;
+}

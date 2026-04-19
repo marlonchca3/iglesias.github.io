@@ -216,17 +216,17 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page">
-    <!-- Pantalla de login si se hace clic en Admin o si no está autenticado -->
+    <!-- Pantalla de login en modal si se hace clic en Admin -->
     <LoginView 
-      v-if="showLoginPrompt || (!authLoading && !currentUser)" 
+      v-if="showLoginPrompt" 
       @logged-in="currentUser = $event; showLoginPrompt = false" 
     />
 
     <!-- Panel de admin si está autenticado -->
-    <AdminView v-else-if="!authLoading && currentUser" @logout="currentUser = null" />
+    <AdminView v-if="!authLoading && currentUser" @logout="currentUser = null" />
 
-    <!-- Contenido principal (cualquiera puede ver) -->
-    <template v-else>
+    <!-- Contenido principal (siempre visible si no está en admin) -->
+    <template v-if="!currentUser || authLoading">
       <header class="hero">
         <div>
           <p class="eyebrow">Vue + geolocalización + alertas</p>

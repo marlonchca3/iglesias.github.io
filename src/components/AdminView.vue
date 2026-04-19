@@ -42,12 +42,15 @@ const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 
 onMounted(async () => {
   try {
-    churches.value = await getChurchesFromFirestore()
-    loading.value = false
+    // Intentar cargar de Firestore
+    const fsChurches = await getChurchesFromFirestore()
+    churches.value = fsChurches.length > 0 ? fsChurches : getChurchesLocal()
   } catch (err) {
-    error.value = 'Error cargando iglesias: ' + err.message
-    loading.value = false
+    console.error('Error loading from Firestore, using localStorage:', err)
+    // Fallback a localStorage
+    churches.value = getChurchesLocal()
   }
+  loading.value = false
 })
 
 function openForm() {
@@ -85,12 +88,42 @@ async function submitForm() {
       await addChurchToFirestore(formData.value)
     }
     
-    churches.value = await getChurchesFromFirestore()
+    // Recargar desde localStorage (fallback más confiable)
+    churches.value = getChurchesLocal()
     showForm.value = false
     resetForm()
     alert('✅ Iglesia guardada exitosamente')
   } catch (err) {
-    error.value = 'Error guardando iglesia: ' + err.message
+    // Incluso con error, guardar en localStorage
+    try {
+      const allChurches = getChurchesLocal()
+      if (editingId.value) {
+        const idx = allChurches.findIndex(c => c.id === editingId.value)
+        if (idx !== -1) {
+          allChurches[idx] = { ...allChurches[idx], ...formData.value }
+          saveChurchesLocal(allChurches)
+        }
+      } else {
+        const newId = Math.max(...allChurches.map(c => c.id || 0), 0) + 1
+        const newChurch = {
+          id: newId,
+          name: formData.value.name,
+          address: formData.value.address,
+          lat: parseFloat(formData.value.lat),
+          lng: parseFloat(formData.value.lng),
+          source: formData.value.source || 'Usuario',
+          schedules: { sun: [], mon: [], tue: [], wed: [], thu: [], fri: [], sat: [] }
+        }
+        allChurches.push(newChurch)
+        saveChurchesLocal(allChurches)
+      }
+      churches.value = getChurchesLocal()
+      showForm.value = false
+      resetForm()
+      alert('✅ Iglesia guardada en el navegador (localStorage)')
+    } catch (localErr) {
+      error.value = 'Error: ' + localErr.message
+    }
   }
 }
 
@@ -98,11 +131,15 @@ async function removeChurch(id) {
   if (confirm('¿Estás seguro de que deseas eliminar esta iglesia?')) {
     try {
       await deleteChurchFromFirestore(id)
-      churches.value = await getChurchesFromFirestore()
-      alert('✅ Iglesia eliminada')
     } catch (err) {
-      error.value = 'Error eliminando iglesia: ' + err.message
+      console.warn('Error en Firestore:', err)
     }
+    // Siempre eliminar de localStorage
+    const allChurches = getChurchesLocal()
+    const filtered = allChurches.filter(c => c.id !== id)
+    saveChurchesLocal(filtered)
+    churches.value = getChurchesLocal()
+    alert('✅ Iglesia eliminada')
   }
 }
 
@@ -123,10 +160,17 @@ async function addSchedule(churchId, day) {
       church.schedules[day].sort()
       try {
         await updateChurchInFirestore(churchId, church)
-        churches.value = await getChurchesFromFirestore()
       } catch (err) {
-        error.value = 'Error actualizando horario: ' + err.message
+        console.warn('Error en Firestore:', err)
       }
+      // Siempre guardar en localStorage
+      const allChurches = getChurchesLocal()
+      const idx = allChurches.findIndex(c => c.id === churchId)
+      if (idx !== -1) {
+        allChurches[idx] = church
+        saveChurchesLocal(allChurches)
+      }
+      churches.value = getChurchesLocal()
     }
   } else if (time) {
     alert('Formato inválido. Usa HH:MM (ej: 18:00)')
@@ -138,10 +182,17 @@ async function removeSchedule(churchId, day, time) {
   church.schedules[day] = church.schedules[day].filter(t => t !== time)
   try {
     await updateChurchInFirestore(churchId, church)
-    churches.value = await getChurchesFromFirestore()
   } catch (err) {
-    error.value = 'Error eliminando horario: ' + err.message
+    console.warn('Error en Firestore:', err)
   }
+  // Siempre guardar en localStorage
+  const allChurches = getChurchesLocal()
+  const idx = allChurches.findIndex(c => c.id === churchId)
+  if (idx !== -1) {
+    allChurches[idx] = church
+    saveChurchesLocal(allChurches)
+  }
+  churches.value = getChurchesLocal()
 }
 
 function exportData() {

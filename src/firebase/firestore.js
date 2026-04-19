@@ -152,8 +152,9 @@ export async function initializeChurches() {
 // Agregar iglesia
 export async function addChurchToFirestore(church) {
   try {
-    const churches = await getChurchesFromFirestore()
-    const newId = Math.max(...churches.map(c => c.id || 0), 0) + 1
+    // Primero, obtener iglesias de localStorage (mucho más rápido)
+    const allChurches = getChurchesLocal()
+    const newId = Math.max(...allChurches.map(c => c.id || 0), 0) + 1
     
     const newChurch = {
       id: newId,
@@ -173,18 +174,17 @@ export async function addChurchToFirestore(church) {
       }
     }
     
+    // Guardar en localStorage primero (inmediato)
+    allChurches.push(newChurch)
+    saveChurchesLocal(allChurches)
+    
+    // Intentar guardar en Firestore en paralelo (sin bloquear)
     try {
-      // Intentar guardar en Firestore
       await setDoc(doc(db, CHURCHES_COLLECTION, `church_${newId}`), newChurch)
       console.log('Iglesia guardada en Firestore')
     } catch (fsError) {
-      console.warn('Error guardando en Firestore, guardando en localStorage:', fsError.message)
+      console.warn('Firestore no disponible, guardado en localStorage:', fsError.message)
     }
-    
-    // Siempre guardar en localStorage como respaldo
-    const allChurches = getChurchesLocal()
-    allChurches.push(newChurch)
-    saveChurchesLocal(allChurches)
     
     return newChurch
   } catch (error) {

@@ -42,13 +42,25 @@ const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 
 onMounted(async () => {
   try {
-    // Intentar cargar de Firestore
-    const fsChurches = await getChurchesFromFirestore()
-    churches.value = fsChurches.length > 0 ? fsChurches : getChurchesLocal()
+    // Usar localStorage directamente (mucho más rápido)
+    let allChurches = getChurchesLocal()
+    
+    // Si localStorage está vacío, intentar Firestore con timeout
+    if (!allChurches || allChurches.length === 0) {
+      try {
+        const fsChurches = await getChurchesFromFirestore()
+        if (fsChurches && fsChurches.length > 0) {
+          allChurches = fsChurches
+        }
+      } catch (fsErr) {
+        console.warn('Firestore no disponible, usando localStorage')
+      }
+    }
+    
+    churches.value = allChurches || []
   } catch (err) {
-    console.error('Error loading from Firestore, using localStorage:', err)
-    // Fallback a localStorage
-    churches.value = getChurchesLocal()
+    console.error('Error cargando iglesias:', err)
+    churches.value = []
   }
   loading.value = false
 })

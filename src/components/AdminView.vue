@@ -1,14 +1,13 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { getChurchesLocal, saveChurchesLocal, updateChurchInFirestore, deleteChurchFromFirestore, getLastUpdate } from '../firebase/firestore'
+import { getChurches, deleteChurch } from '../firebase/firestore'
 import { logoutAdmin } from '../firebase/auth'
 
 const emit = defineEmits(['logout'])
 const churches = ref([])
 const loading = ref(true)
 const error = ref('')
-let syncInterval = null
-let lastSyncTime = 0
+let unsubscribeChurches = null
 
 const dayNames = {
   sun: 'Domingo', mon: 'Lunes', tue: 'Martes', wed: 'Miércoles',
@@ -16,38 +15,25 @@ const dayNames = {
 }
 const dayKeys = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
 
-function refreshChurches() {
-  const currentTime = getLastUpdate()
-  if (currentTime > lastSyncTime) {
-    lastSyncTime = currentTime
-    churches.value = getChurchesLocal()
-  }
-}
-
 onMounted(() => {
-  churches.value = getChurchesLocal()
-  lastSyncTime = getLastUpdate()
-  loading.value = false
-  
-  // Sincronizar cada 2 segundos para detectar cambios de otros dispositivos
-  syncInterval = setInterval(refreshChurches, 2000)
-  
-  // También escuchar eventos de storage para cambios en otras pestañas
-  window.addEventListener('storage', refreshChurches)
+  // Escuchar iglesias en tiempo real desde Firestore
+  unsubscribeChurches = getChurches((data) => {
+    churches.value = data
+    loading.value = false
+  })
 })
 
 onBeforeUnmount(() => {
-  if (syncInterval) clearInterval(syncInterval)
-  window.removeEventListener('storage', refreshChurches)
+  if (unsubscribeChurches) {
+    unsubscribeChurches()
+  }
 })
 
 async function removeChurch(id) {
   if (confirm('¿Eliminar iglesia?')) {
     try {
-      const allChurches = getChurchesLocal()
-      saveChurchesLocal(allChurches.filter(c => c.id !== id))
-      deleteChurchFromFirestore(id).catch(err => console.warn(err))
-      churches.value = getChurchesLocal()
+      await deleteChurch(id)
+      // No necesita actualizar manualmente, Firestore dispara el listener automáticamente
     } catch (err) {
       error.value = 'Error: ' + err.message
     }

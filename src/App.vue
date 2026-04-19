@@ -3,14 +3,14 @@ import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 import MapView from './components/MapView.vue'
 import AdminView from './components/AdminView.vue'
 import LoginView from './components/LoginView.vue'
-import { getChurchesFromFirestore, getChurchesLocal, startDeviceSyncPolling, initStorageListener, initializeChurches } from './firebase/firestore'
+import { getChurches, initializeChurches } from './firebase/firestore'
 import { onAuthStateChange } from './firebase/auth'
 
 const churches = ref([])
 const currentUser = ref(null)
 const authLoading = ref(true)
 const showLoginPrompt = ref(false)
-let syncInterval = null
+let unsubscribeChurches = null
 
 const userPosition = ref(null)
 const errorMessage = ref('')
@@ -186,18 +186,15 @@ function startTracking() {
 }
 
 onMounted(() => {
-  // Inicializar datos
-  initializeChurches()
-  
-  // Cargar iglesias inicialmente
-  getChurchesFromFirestore()
-    .then(data => {
-      churches.value = data
-    })
-    .catch(err => {
-      console.error('Error loading churches:', err)
-      churches.value = getChurchesLocal()
-    })
+  // Inicializar datos en Firestore
+  initializeChurches().catch(err => {
+    console.error('Error inicializando iglesias:', err)
+  })
+
+  // Configurar listener en tiempo real para iglesias
+  unsubscribeChurches = getChurches((data) => {
+    churches.value = data
+  })
 
   // Configurar listener de autenticación
   onAuthStateChange((user) => {
@@ -205,20 +202,12 @@ onMounted(() => {
     authLoading.value = false
   })
 
-  // Configurar sincronización entre pestañas
-  initStorageListener()
-
-  // Iniciar polling para sincronizar con otros dispositivos (cada 5 segundos)
-  syncInterval = startDeviceSyncPolling((updatedChurches) => {
-    churches.value = updatedChurches
-  })
-
   startTracking()
 })
 
 onBeforeUnmount(() => {
   if (watchId.value !== null) navigator.geolocation.clearWatch(watchId.value)
-  if (syncInterval) clearInterval(syncInterval)
+  if (unsubscribeChurches) unsubscribeChurches()
 })
 </script>
 

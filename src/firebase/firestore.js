@@ -105,9 +105,17 @@ const DEFAULT_CHURCHES = [
 // Obtener todas las iglesias
 export async function getChurchesFromFirestore() {
   try {
-    const querySnapshot = await getDocs(
+    // Crear una promesa que resuelve después de 2 segundos (timeout)
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Firestore timeout')), 2000)
+    )
+    
+    const queryPromise = getDocs(
       query(collection(db, CHURCHES_COLLECTION), orderBy('id', 'asc'))
     )
+    
+    // Competencia entre el query y el timeout
+    const querySnapshot = await Promise.race([queryPromise, timeoutPromise])
     
     if (querySnapshot.empty) {
       // Si no hay datos en Firestore, usar localStorage o predeterminados
@@ -128,13 +136,9 @@ export async function getChurchesFromFirestore() {
     }))
   } catch (error) {
     console.error('Error fetching churches from Firestore:', error)
-    // Fallback a localStorage
+    // Siempre fallback a localStorage o DEFAULT_CHURCHES
     const local = getChurchesLocal()
-    if (local && local.length > 0) {
-      console.log('Firestore error, usando localStorage:', error.message)
-      return local
-    }
-    return DEFAULT_CHURCHES
+    return local && local.length > 0 ? local : DEFAULT_CHURCHES
   }
 }
 

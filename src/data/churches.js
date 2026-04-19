@@ -22,7 +22,7 @@ export const DEFAULT_CHURCHES = [
     address: 'Callao, Perú',
     lat: -12.0408,
     lng: -77.1246,
-    source: 'Diócesis del Callao',
+    source: 'Diócesis',
     schedules: {
       mon: ['19:00'],
       tue: ['19:00'],

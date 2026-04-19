@@ -20,11 +20,24 @@ const CHURCHES_COLLECTION = 'iglesias'
 let realTimeUnsubscribe = null
 
 /**
- * Obtener todas las iglesias con sincronización en tiempo real desde Firestore
- * @param {Function} callback - Función a ejecutar cuando hay cambios
+ * Convertir documento de Firestore a objeto iglesia con fechas legibles
+ * @private
+ */
+function convertFirestoreDoc(doc) {
+  return {
+    id: doc.id,
+    ...doc.data(),
+    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
+    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt)
+  }
+}
+
+/**
+ * Escuchar cambios en tiempo real de todas las iglesias desde Firestore
+ * @param {Function} callback - Se ejecuta cada vez que hay cambios, recibe array de iglesias
  * @returns {Function} Función para cancelar la suscripción
  */
-export function getChurches(callback) {
+export function listenChurches(callback) {
   try {
     console.log('Leyendo iglesias desde Firestore')
     const churchesRef = collection(db, CHURCHES_COLLECTION)
@@ -39,17 +52,7 @@ export function getChurches(callback) {
           return
         }
         
-        const churches = []
-        snapshot.forEach((doc) => {
-          churches.push({
-            id: doc.id,
-            ...doc.data(),
-            // Convertir timestamps a fechas legibles si existen
-            createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
-            updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt)
-          })
-        })
-        
+        const churches = snapshot.docs.map(convertFirestoreDoc)
         console.log(`${churches.length} iglesias sincronizadas desde Firestore`)
         callback(churches)
       },
@@ -58,7 +61,6 @@ export function getChurches(callback) {
       }
     )
     
-    // Retornar función para desuscribirse
     return realTimeUnsubscribe
   } catch (err) {
     console.error('Error configurando listener en Firestore:', err)
@@ -67,12 +69,19 @@ export function getChurches(callback) {
 }
 
 /**
+ * Alias para listenChurches (compatibilidad)
+ */
+export function getChurches(callback) {
+  return listenChurches(callback)
+}
+
+/**
  * Obtener todas las iglesias una sola vez desde Firestore (sin listener)
  * @returns {Promise<Array>} Array de iglesias desde Firestore, vacío si no hay
  */
 export async function getChurchesOnce() {
   try {
-    console.log('Obteniendo iglesias una sola vez desde Firestore')
+    console.log('Leyendo iglesias desde Firestore (una sola vez)')
     const churchesRef = collection(db, CHURCHES_COLLECTION)
     const q = query(churchesRef, orderBy('name', 'asc'))
     const snapshot = await getDocs(q)
@@ -82,16 +91,7 @@ export async function getChurchesOnce() {
       return []
     }
     
-    const churches = []
-    snapshot.forEach((doc) => {
-      churches.push({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
-        updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt)
-      })
-    })
-    
+    const churches = snapshot.docs.map(convertFirestoreDoc)
     console.log(`${churches.length} iglesias obtenidas desde Firestore`)
     return churches
   } catch (err) {
@@ -102,11 +102,12 @@ export async function getChurchesOnce() {
 
 /**
  * Agregar una nueva iglesia a Firestore
- * @param {Object} church - Datos de la iglesia
- * @returns {Promise<Object>} Iglesia creada con ID
+ * @param {Object} church - Datos de la iglesia { name, address, lat, lng, schedules, etc }
+ * @returns {Promise<Object>} Iglesia creada con ID desde Firestore
  */
 export async function addChurch(church) {
   try {
+    console.log('Agregando iglesia a Firestore:', church.name)
     const churchesRef = collection(db, CHURCHES_COLLECTION)
     
     const newChurch = {
@@ -125,6 +126,7 @@ export async function addChurch(church) {
     }
     
     const docRef = await addDoc(churchesRef, newChurch)
+    console.log('Iglesia agregada exitosamente con ID:', docRef.id)
     
     return {
       id: docRef.id,
@@ -139,13 +141,14 @@ export async function addChurch(church) {
 }
 
 /**
- * Actualizar una iglesia existente
- * @param {string} id - ID del documento
+ * Actualizar una iglesia existente en Firestore
+ * @param {string} id - ID del documento en Firestore
  * @param {Object} data - Datos a actualizar
  * @returns {Promise<void>}
  */
 export async function updateChurch(id, data) {
   try {
+    console.log('Actualizando iglesia en Firestore:', id)
     const churchRef = doc(db, CHURCHES_COLLECTION, id)
     
     const updates = {
@@ -154,6 +157,7 @@ export async function updateChurch(id, data) {
     }
     
     await updateDoc(churchRef, updates)
+    console.log('Iglesia actualizada exitosamente:', id)
   } catch (err) {
     console.error('Error actualizando iglesia:', err)
     throw err
@@ -161,14 +165,16 @@ export async function updateChurch(id, data) {
 }
 
 /**
- * Eliminar una iglesia
- * @param {string} id - ID del documento
+ * Eliminar una iglesia de Firestore
+ * @param {string} id - ID del documento a eliminar
  * @returns {Promise<void>}
  */
 export async function deleteChurch(id) {
   try {
+    console.log('Eliminando iglesia de Firestore:', id)
     const churchRef = doc(db, CHURCHES_COLLECTION, id)
     await deleteDoc(churchRef)
+    console.log('Iglesia eliminada exitosamente:', id)
   } catch (err) {
     console.error('Error eliminando iglesia:', err)
     throw err
@@ -177,6 +183,7 @@ export async function deleteChurch(id) {
 
 /**
  * Inicializar colección con datos por defecto (solo si está vacía)
+ * Se ejecuta una sola vez al cargar la aplicación
  * @returns {Promise<void>}
  */
 export async function initializeChurches() {
@@ -194,7 +201,9 @@ export async function initializeChurches() {
         })
       }
       
-      console.log('Colección inicializada correctamente')
+      console.log(`Colección inicializada con ${DEFAULT_CHURCHES.length} iglesias`)
+    } else {
+      console.log('Colección iglesias ya tiene datos, inicialización omitida')
     }
   } catch (err) {
     console.error('Error inicializando iglesias:', err)
@@ -204,9 +213,11 @@ export async function initializeChurches() {
 
 /**
  * Detener la sincronización en tiempo real
+ * Se debe llamar al desmontar el componente
  */
 export function stopRealTimeSync() {
   if (realTimeUnsubscribe) {
+    console.log('Deteniendo sincronización en tiempo real de Firestore')
     realTimeUnsubscribe()
     realTimeUnsubscribe = null
   }

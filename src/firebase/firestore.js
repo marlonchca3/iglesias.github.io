@@ -110,7 +110,14 @@ export async function getChurchesFromFirestore() {
     )
     
     if (querySnapshot.empty) {
-      // Si no hay datos, inicializar con los predeterminados
+      // Si no hay datos en Firestore, usar localStorage o predeterminados
+      const local = getChurchesLocal()
+      if (local && local.length > 0) {
+        console.log('Usando iglesias del localStorage')
+        return local
+      }
+      // Si tampoco hay en localStorage, inicializar con predeterminados
+      console.log('Inicializando Firestore con iglesias predeterminadas')
       await initializeChurches()
       return DEFAULT_CHURCHES
     }
@@ -120,7 +127,13 @@ export async function getChurchesFromFirestore() {
       ...doc.data()
     }))
   } catch (error) {
-    console.error('Error fetching churches:', error)
+    console.error('Error fetching churches from Firestore:', error)
+    // Fallback a localStorage
+    const local = getChurchesLocal()
+    if (local && local.length > 0) {
+      console.log('Firestore error, usando localStorage:', error.message)
+      return local
+    }
     return DEFAULT_CHURCHES
   }
 }
@@ -160,7 +173,19 @@ export async function addChurchToFirestore(church) {
       }
     }
     
-    await setDoc(doc(db, CHURCHES_COLLECTION, `church_${newId}`), newChurch)
+    try {
+      // Intentar guardar en Firestore
+      await setDoc(doc(db, CHURCHES_COLLECTION, `church_${newId}`), newChurch)
+      console.log('Iglesia guardada en Firestore')
+    } catch (fsError) {
+      console.warn('Error guardando en Firestore, guardando en localStorage:', fsError.message)
+    }
+    
+    // Siempre guardar en localStorage como respaldo
+    const allChurches = getChurchesLocal()
+    allChurches.push(newChurch)
+    saveChurchesLocal(allChurches)
+    
     return newChurch
   } catch (error) {
     console.error('Error adding church:', error)
@@ -171,7 +196,21 @@ export async function addChurchToFirestore(church) {
 // Actualizar iglesia
 export async function updateChurchInFirestore(id, updates) {
   try {
-    await updateDoc(doc(db, CHURCHES_COLLECTION, `church_${id}`), updates)
+    try {
+      // Intentar actualizar en Firestore
+      await updateDoc(doc(db, CHURCHES_COLLECTION, `church_${id}`), updates)
+      console.log('Iglesia actualizada en Firestore')
+    } catch (fsError) {
+      console.warn('Error actualizando en Firestore:', fsError.message)
+    }
+    
+    // Siempre actualizar en localStorage como respaldo
+    const allChurches = getChurchesLocal()
+    const index = allChurches.findIndex(c => c.id === id)
+    if (index !== -1) {
+      allChurches[index] = { ...allChurches[index], ...updates }
+      saveChurchesLocal(allChurches)
+    }
   } catch (error) {
     console.error('Error updating church:', error)
     throw error
@@ -181,7 +220,18 @@ export async function updateChurchInFirestore(id, updates) {
 // Eliminar iglesia
 export async function deleteChurchFromFirestore(id) {
   try {
-    await deleteDoc(doc(db, CHURCHES_COLLECTION, `church_${id}`))
+    try {
+      // Intentar eliminar en Firestore
+      await deleteDoc(doc(db, CHURCHES_COLLECTION, `church_${id}`))
+      console.log('Iglesia eliminada en Firestore')
+    } catch (fsError) {
+      console.warn('Error eliminando en Firestore:', fsError.message)
+    }
+    
+    // Siempre eliminar en localStorage como respaldo
+    const allChurches = getChurchesLocal()
+    const filtered = allChurches.filter(c => c.id !== id)
+    saveChurchesLocal(filtered)
   } catch (error) {
     console.error('Error deleting church:', error)
     throw error

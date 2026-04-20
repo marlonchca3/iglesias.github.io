@@ -8,6 +8,7 @@ import {
   onSnapshot,
   query,
   orderBy,
+  where,
   Timestamp
 } from 'firebase/firestore'
 import { db } from './config'
@@ -24,11 +25,14 @@ let realTimeUnsubscribe = null
  * @private
  */
 function convertFirestoreDoc(doc) {
+  const data = doc.data()
+
   return {
     id: doc.id,
-    ...doc.data(),
-    createdAt: doc.data().createdAt?.toDate?.() || new Date(doc.data().createdAt),
-    updatedAt: doc.data().updatedAt?.toDate?.() || new Date(doc.data().updatedAt)
+    docId: doc.id,
+    ...data,
+    createdAt: data.createdAt?.toDate?.() || new Date(data.createdAt),
+    updatedAt: data.updatedAt?.toDate?.() || new Date(data.updatedAt)
   }
 }
 
@@ -207,6 +211,45 @@ export async function initializeChurches() {
     }
   } catch (err) {
     console.error('Error inicializando iglesias:', err)
+    throw err
+  }
+}
+
+/**
+ * Sincronizar los datos locales de src/data/churches.js con Firestore.
+ * Útil cuando editas DEFAULT_CHURCHES y quieres reflejar esos cambios en celulares.
+ * @returns {Promise<number>} Cantidad de iglesias sincronizadas
+ */
+export async function syncDefaultChurches() {
+  try {
+    console.log('Sincronizando iglesias por defecto con Firestore...')
+    const churchesRef = collection(db, CHURCHES_COLLECTION)
+
+    for (const church of DEFAULT_CHURCHES) {
+      const q = query(churchesRef, where('id', '==', church.id))
+      const snapshot = await getDocs(q)
+      const payload = {
+        ...church,
+        updatedAt: Timestamp.now()
+      }
+
+      if (snapshot.empty) {
+        await addDoc(churchesRef, {
+          ...payload,
+          createdAt: Timestamp.now()
+        })
+        continue
+      }
+
+      for (const churchDoc of snapshot.docs) {
+        await updateDoc(churchDoc.ref, payload)
+      }
+    }
+
+    console.log(`${DEFAULT_CHURCHES.length} iglesias sincronizadas`)
+    return DEFAULT_CHURCHES.length
+  } catch (err) {
+    console.error('Error sincronizando iglesias por defecto:', err)
     throw err
   }
 }

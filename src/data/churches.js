@@ -5,16 +5,7 @@ export const DEFAULT_CHURCHES = [
     address: 'Plaza Grau, Callao',
     lat: -12.0612,
     lng: -77.1469,
-    source: 'Diócesis del Callao',
-    schedules: {
-      mon: ['18:00'],
-      tue: ['18:00'],
-      wed: ['18:00'],
-      thu: ['18:00'],
-      fri: ['18:00'],
-      sat: ['18:00'],
-      sun: ['08:00', '12:00', '18:00']
-    }
+    source: 'Diócesis del Callao'
   },
   {
     id: 2,
@@ -22,16 +13,7 @@ export const DEFAULT_CHURCHES = [
     address: 'Callao, Perú',
     lat: -12.040661956503094,
     lng: -77.12470886026675,
-    source: 'Diócesis',
-    schedules: {
-      mon: ['19:00'],
-      tue: ['19:00'],
-      wed: ['19:00'],
-      thu: ['19:00'],
-      fri: ['19:00'],
-      sat: ['19:00'],
-      sun: ['07:30', '10:00', '19:00']
-    }
+    source: 'Diócesis'
   },
   {
     id: 3,
@@ -39,16 +21,7 @@ export const DEFAULT_CHURCHES = [
     address: 'Carmen de la Legua-Reynoso, Callao',
     lat: -12.0475,
     lng: -77.0925,
-    source: 'Diócesis del Callao',
-    schedules: {
-      mon: ['19:00'],
-      tue: ['19:00'],
-      wed: ['19:00'],
-      thu: ['19:00'],
-      fri: ['19:00'],
-      sat: ['19:00'],
-      sun: ['08:00', '10:00', '12:00', '18:00', '19:00']
-    }
+    source: 'Diócesis del Callao'
   },
   {
     id: 4,
@@ -56,16 +29,7 @@ export const DEFAULT_CHURCHES = [
     address: 'La Perla, Callao',
     lat: -12.0732,
     lng: -77.1216,
-    source: 'Diócesis del Callao',
-    schedules: {
-      mon: ['19:00'],
-      tue: ['19:00'],
-      wed: ['19:00'],
-      thu: ['19:00'],
-      fri: ['19:00'],
-      sat: ['19:00'],
-      sun: ['19:00']
-    }
+    source: 'Diócesis del Callao'
   },
   {
     id: 5,
@@ -73,15 +37,6 @@ export const DEFAULT_CHURCHES = [
     address: 'Bocanegra, Callao',
     lat: -12.0234,
     lng: -77.1107,
-    source: 'Diócesis del Callao',
-    schedules: {
-      mon: ['19:30'],
-      tue: ['19:30'],
-      wed: ['19:30'],
-      thu: ['19:30'],
-      fri: ['19:30'],
-      sat: [],
-      sun: ['07:30', '11:00', '19:30']
-    }
+    source: 'Diócesis del Callao'
   }
 ]

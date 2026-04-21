@@ -88,7 +88,7 @@ const nearestChurch = computed(() => churchesWithDistance.value?.[0] ?? null)
 const todayMasses = computed(() => {
   const church = nearestChurch.value
   if (!church) return []
-  return church.schedules[todayKey.value] ?? []
+  return church.schedules?.[todayKey.value] ?? []
 })
 
 const nextMass = computed(() => {
@@ -301,7 +301,7 @@ onBeforeUnmount(() => {
     <section class="card notes">
       <h2>Cómo mejorar esta app</h2>
       <ol>
-        <li>Mover los horarios a Firebase o Supabase.</li>
+        <li>Administrar horarios directamente desde Firestore.</li>
         <li>Agregar panel admin para editar horarios especiales.</li>
         <li>Convertirla en PWA para instalarla en Android.</li>
         <li>Usar Web Push desde servidor para recordatorios programados.</li>

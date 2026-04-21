@@ -1,16 +1,39 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { getChurches, addChurch, deleteChurch, syncDefaultChurches } from '../firebase/firestore'
+import {
+  getChurches,
+  addChurch,
+  deleteChurch,
+  syncDefaultChurches,
+  syncDefaultSchedules,
+  updateChurch,
+  updateChurchByIdentity
+} from '../firebase/firestore'
 import { logoutAdmin } from '../firebase/auth'
 
 const emit = defineEmits(['logout'])
 const churches = ref([])
 const loading = ref(true)
 const syncing = ref(false)
+const syncingSchedules = ref(false)
 const saving = ref(false)
 const error = ref('')
 const successMessage = ref('')
 let unsubscribeChurches = null
+const savingSchedulesId = ref('')
+const savingChurchId = ref('')
+
+const weekFields = [
+  { key: 'sun', label: 'Domingo' },
+  { key: 'mon', label: 'Lunes' },
+  { key: 'tue', label: 'Martes' },
+  { key: 'wed', label: 'Miércoles' },
+  { key: 'thu', label: 'Jueves' },
+  { key: 'fri', label: 'Viernes' },
+  { key: 'sat', label: 'Sábado' }
+]
+const churchDrafts = ref({})
+const scheduleDrafts = ref({})
 
 const newChurch = ref({
   name: '',
@@ -24,6 +47,18 @@ onMounted(() => {
   // Escuchar iglesias en tiempo real desde Firestore
   unsubscribeChurches = getChurches((data) => {
     churches.value = data
+    churchDrafts.value = Object.fromEntries(
+      data.map(church => [
+        church.docId || church.id,
+        buildChurchDraft(church)
+      ])
+    )
+    scheduleDrafts.value = Object.fromEntries(
+      data.map(church => [
+        church.docId || church.id,
+        buildScheduleDraft(church.schedules)
+      ])
+    )
     loading.value = false
   })
 })
@@ -103,8 +138,117 @@ async function createChurch() {
   }
 }
 
+function buildChurchDraft(church) {
+  return {
+    name: church.name || '',
+    address: church.address || '',
+    lat: String(church.lat ?? ''),
+    lng: String(church.lng ?? ''),
+    source: church.source || ''
+  }
+}
+
+function buildScheduleDraft(schedules = {}) {
+  return weekFields.reduce((acc, day) => {
+    const values = Array.isArray(schedules[day.key]) ? schedules[day.key] : []
+    acc[day.key] = values.join(', ')
+    return acc
+  }, {})
+}
+
+function parseScheduleValue(value) {
+  if (!value.trim()) return []
+
+  return value
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
+async function saveChurchDetails(church) {
+  const docId = church.docId || church.id
+  const draft = churchDrafts.value[docId]
+
+  if (!draft) return
+
+  const name = draft.name.trim()
+  const address = draft.address.trim()
+  const source = draft.source.trim()
+  const lat = Number(draft.lat)
+  const lng = Number(draft.lng)
+
+  if (!name || !address) {
+    error.value = 'El nombre y la dirección son obligatorios.'
+    successMessage.value = ''
+    return
+  }
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    error.value = 'La latitud y longitud deben ser números válidos.'
+    successMessage.value = ''
+    return
+  }
+
+  error.value = ''
+  successMessage.value = ''
+  savingChurchId.value = docId
+
+  try {
+    await updateChurchByIdentity(church, {
+      id: Number(church.id),
+      name,
+      address,
+      lat,
+      lng,
+      source
+    })
+    successMessage.value = `Datos guardados para ${name}.`
+  } catch (err) {
+    error.value = 'Error: ' + err.message
+  } finally {
+    savingChurchId.value = ''
+  }
+}
+
+async function saveSchedules(church) {
+  const docId = church.docId || church.id
+  const draft = scheduleDrafts.value[docId]
+
+  if (!draft) return
+
+  const invalidTimes = weekFields.flatMap(day =>
+    parseScheduleValue(draft[day.key] || '').filter(
+      time => !/^([01]\d|2[0-3]):([0-5]\d)$/.test(time)
+    )
+  )
+
+  if (invalidTimes.length) {
+    error.value = `Formato inválido en horarios: ${invalidTimes.join(', ')}. Usa HH:MM.`
+    successMessage.value = ''
+    return
+  }
+
+  error.value = ''
+  successMessage.value = ''
+  savingSchedulesId.value = docId
+
+  try {
+    const schedules = weekFields.reduce((acc, day) => {
+      acc[day.key] = parseScheduleValue(draft[day.key] || '').sort()
+      return acc
+    }, {})
+
+    await updateChurchByIdentity(church, { schedules })
+    successMessage.value = `Horarios guardados para ${church.name}.`
+  } catch (err) {
+    error.value = 'Error: ' + err.message
+  } finally {
+    savingSchedulesId.value = ''
+  }
+}
+
 async function syncFromFile() {
-  if (!confirm('¿Sincronizar Firestore con los datos de src/data/churches.js?')) return
+  if (!confirm('¿Sincronizar Firestore con los datos base de src/data/churches.js sin tocar los horarios?')) return
 
   syncing.value = true
   error.value = ''
@@ -117,6 +261,23 @@ async function syncFromFile() {
     error.value = 'Error: ' + err.message
   } finally {
     syncing.value = false
+  }
+}
+
+async function syncSchedulesFromSeed() {
+  if (!confirm('¿Migrar a Firestore los horarios semilla actuales? Esto sobrescribirá los horarios existentes de esas iglesias.')) return
+
+  syncingSchedules.value = true
+  error.value = ''
+  successMessage.value = ''
+
+  try {
+    const count = await syncDefaultSchedules()
+    successMessage.value = `${count} horarios migrados a Firestore.`
+  } catch (err) {
+    error.value = 'Error: ' + err.message
+  } finally {
+    syncingSchedules.value = false
   }
 }
 
@@ -134,7 +295,10 @@ async function handleLogout() {
       <h1>🛠️ Panel Administración</h1>
       <div class="admin-actions">
         <button class="btn-sync" :disabled="syncing" @click="syncFromFile">
-          {{ syncing ? '⏳ Sincronizando...' : '🔄 Sincronizar archivo' }}
+          {{ syncing ? '⏳ Sincronizando...' : '🔄 Sincronizar iglesias base' }}
+        </button>
+        <button class="btn-sync" :disabled="syncingSchedules" @click="syncSchedulesFromSeed">
+          {{ syncingSchedules ? '⏳ Migrando horarios...' : '🕒 Migrar horarios semilla' }}
         </button>
         <button class="btn-logout" @click="handleLogout">🚪 Cerrar sesión</button>
       </div>
@@ -180,9 +344,91 @@ async function handleLogout() {
           <h3>{{ church.name }}</h3>
           <button class="btn-delete" @click="removeChurch(church.docId || church.id)">🗑️</button>
         </div>
-        <p>📍 {{ church.address }}</p>
-        <p>Lat: {{ church.lat }}, Lng: {{ church.lng }}</p>
-        <p v-if="church.source">📋 {{ church.source }}</p>
+
+        <div v-if="churchDrafts[church.docId || church.id]" class="church-editor">
+          <div class="form-grid">
+            <label>
+              Nombre
+              <input
+                v-model="churchDrafts[church.docId || church.id].name"
+                type="text"
+                placeholder="Parroquia..."
+              />
+            </label>
+            <label>
+              Dirección
+              <input
+                v-model="churchDrafts[church.docId || church.id].address"
+                type="text"
+                placeholder="Callao, Perú"
+              />
+            </label>
+            <label>
+              Latitud
+              <input
+                v-model="churchDrafts[church.docId || church.id].lat"
+                type="number"
+                step="any"
+                placeholder="-12.0612"
+              />
+            </label>
+            <label>
+              Longitud
+              <input
+                v-model="churchDrafts[church.docId || church.id].lng"
+                type="number"
+                step="any"
+                placeholder="-77.1469"
+              />
+            </label>
+            <label>
+              Fuente
+              <input
+                v-model="churchDrafts[church.docId || church.id].source"
+                type="text"
+                placeholder="Diócesis del Callao"
+              />
+            </label>
+          </div>
+          <button
+            class="btn-save"
+            type="button"
+            :disabled="savingChurchId === (church.docId || church.id)"
+            @click="saveChurchDetails(church)"
+          >
+            {{
+              savingChurchId === (church.docId || church.id)
+                ? '⏳ Guardando datos...'
+                : '💾 Guardar datos'
+            }}
+          </button>
+        </div>
+
+        <div v-if="scheduleDrafts[church.docId || church.id]" class="schedule-editor">
+          <h4>Horarios en Firestore</h4>
+          <div class="schedule-grid">
+            <label v-for="day in weekFields" :key="day.key">
+              {{ day.label }}
+              <input
+                v-model="scheduleDrafts[church.docId || church.id][day.key]"
+                type="text"
+                placeholder="08:00, 12:00, 18:00"
+              />
+            </label>
+          </div>
+          <button
+            class="btn-save"
+            type="button"
+            :disabled="savingSchedulesId === (church.docId || church.id)"
+            @click="saveSchedules(church)"
+          >
+            {{
+              savingSchedulesId === (church.docId || church.id)
+                ? '⏳ Guardando horarios...'
+                : '💾 Guardar horarios'
+            }}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -310,6 +556,38 @@ async function handleLogout() {
   color: #94a3b8;
   font-size: 0.9rem;
 }
+.schedule-editor {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+}
+.schedule-editor h4 {
+  margin: 0 0 12px;
+  color: #e2e8f0;
+}
+.schedule-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.schedule-grid label {
+  color: #cbd5e1;
+  display: grid;
+  gap: 8px;
+  font-weight: 600;
+}
+.schedule-grid input {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font: inherit;
+  padding: 10px 12px;
+}
+.schedule-grid input:focus {
+  border-color: #38bdf8;
+  outline: none;
+}
 @media (max-width: 760px) {
   .admin-header {
     align-items: flex-start;
@@ -317,6 +595,9 @@ async function handleLogout() {
     gap: 16px;
   }
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+  .schedule-grid {
     grid-template-columns: 1fr;
   }
 }

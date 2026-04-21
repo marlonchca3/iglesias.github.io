@@ -13,12 +13,82 @@ import {
 } from 'firebase/firestore'
 import { db } from './config'
 import { DEFAULT_CHURCHES } from '../data/churches'
+import { DEFAULT_CHURCH_SCHEDULES } from '../data/churchSchedules'
 
 // Colección de iglesias en Firestore
 const CHURCHES_COLLECTION = 'iglesias'
+const WEEK_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+const CHURCHES_SEED_SYNC_KEY = 'iglesias:churches-seed-signature:v1'
 
 // Listeners para sincronización en tiempo real
 let realTimeUnsubscribe = null
+
+function createEmptySchedules() {
+  return WEEK_KEYS.reduce((acc, key) => {
+    acc[key] = []
+    return acc
+  }, {})
+}
+
+function normalizeSchedules(schedules = {}) {
+  const normalized = createEmptySchedules()
+
+  for (const key of WEEK_KEYS) {
+    const values = Array.isArray(schedules[key]) ? schedules[key] : []
+    normalized[key] = values
+      .map(value => String(value).trim())
+      .filter(Boolean)
+      .sort()
+  }
+
+  return normalized
+}
+
+function getSeedSchedules(churchId) {
+  return normalizeSchedules(DEFAULT_CHURCH_SCHEDULES[churchId])
+}
+
+function getChurchSeedSignature() {
+  return JSON.stringify(
+    DEFAULT_CHURCHES.map(church => ({
+      id: church.id,
+      name: church.name,
+      address: church.address,
+      lat: church.lat,
+      lng: church.lng,
+      source: church.source || ''
+    }))
+  )
+}
+
+function readStoredSeedSignature() {
+  if (typeof window === 'undefined' || !window.localStorage) return null
+  return window.localStorage.getItem(CHURCHES_SEED_SYNC_KEY)
+}
+
+function writeStoredSeedSignature(signature) {
+  if (typeof window === 'undefined' || !window.localStorage) return
+  window.localStorage.setItem(CHURCHES_SEED_SYNC_KEY, signature)
+}
+
+async function getChurchRefsByIdentity(churchId, docId) {
+  const refs = new Map()
+
+  if (docId) {
+    refs.set(docId, doc(db, CHURCHES_COLLECTION, docId))
+  }
+
+  if (Number.isFinite(Number(churchId))) {
+    const churchesRef = collection(db, CHURCHES_COLLECTION)
+    const snapshot = await getDocs(query(churchesRef, where('id', '==', Number(churchId))))
+
+    for (const churchDoc of snapshot.docs) {
+      refs.set(churchDoc.id, churchDoc.ref)
+    }
+  }
+
+  return [...refs.values()]
+}
 
 /**
  * Convertir documento de Firestore a objeto iglesia con fechas legibles
@@ -31,6 +101,7 @@ function convertFirestoreDoc(doc) {
     id: doc.id,
     docId: doc.id,
     ...data,
+    schedules: normalizeSchedules(data.schedules),
     createdAt: data.createdAt?.toDate?.() || new Date(data.createdAt),
     updatedAt: data.updatedAt?.toDate?.() || new Date(data.updatedAt)
   }
@@ -116,15 +187,7 @@ export async function addChurch(church) {
     
     const newChurch = {
       ...church,
-      schedules: church.schedules || {
-        sun: [],
-        mon: [],
-        tue: [],
-        wed: [],
-        thu: [],
-        fri: [],
-        sat: []
-      },
+      schedules: normalizeSchedules(church.schedules),
       createdAt: Timestamp.now(),
       updatedAt: Timestamp.now()
     }
@@ -157,6 +220,9 @@ export async function updateChurch(id, data) {
     
     const updates = {
       ...data,
+      ...(Object.prototype.hasOwnProperty.call(data, 'schedules')
+        ? { schedules: normalizeSchedules(data.schedules) }
+        : {}),
       updatedAt: Timestamp.now()
     }
     
@@ -164,6 +230,38 @@ export async function updateChurch(id, data) {
     console.log('Iglesia actualizada exitosamente:', id)
   } catch (err) {
     console.error('Error actualizando iglesia:', err)
+    throw err
+  }
+}
+
+/**
+ * Actualizar una iglesia usando docId y/o el campo id numérico.
+ * Útil para corregir datos existentes aunque el documento visible no tenga el id esperado.
+ * @param {Object} church - Iglesia actual con docId e id
+ * @param {Object} data - Datos a actualizar
+ * @returns {Promise<number>} Cantidad de documentos actualizados
+ */
+export async function updateChurchByIdentity(church, data) {
+  try {
+    const refs = await getChurchRefsByIdentity(church?.id, church?.docId)
+
+    if (!refs.length) {
+      throw new Error('No se encontró el documento de la iglesia en Firestore.')
+    }
+
+    const updates = {
+      ...data,
+      ...(Object.prototype.hasOwnProperty.call(data, 'schedules')
+        ? { schedules: normalizeSchedules(data.schedules) }
+        : {}),
+      updatedAt: Timestamp.now()
+    }
+
+    await Promise.all(refs.map(churchRef => updateDoc(churchRef, updates)))
+    console.log(`Iglesia actualizada exitosamente en ${refs.length} documento(s)`)
+    return refs.length
+  } catch (err) {
+    console.error('Error actualizando iglesia por identidad:', err)
     throw err
   }
 }
@@ -193,6 +291,7 @@ export async function deleteChurch(id) {
 export async function initializeChurches() {
   try {
     const snapshot = await getDocs(collection(db, CHURCHES_COLLECTION))
+    const seedSignature = getChurchSeedSignature()
     
     if (snapshot.empty) {
       console.log('Inicializando colección iglesias con datos por defecto...')
@@ -200,14 +299,20 @@ export async function initializeChurches() {
       for (const church of DEFAULT_CHURCHES) {
         await addDoc(collection(db, CHURCHES_COLLECTION), {
           ...church,
+          schedules: getSeedSchedules(church.id),
           createdAt: Timestamp.now(),
           updatedAt: Timestamp.now()
         })
       }
       
       console.log(`Colección inicializada con ${DEFAULT_CHURCHES.length} iglesias`)
+      writeStoredSeedSignature(seedSignature)
     } else {
       console.log('Colección iglesias ya tiene datos, inicialización omitida')
+
+      if (!readStoredSeedSignature()) {
+        writeStoredSeedSignature(seedSignature)
+      }
     }
   } catch (err) {
     console.error('Error inicializando iglesias:', err)
@@ -229,13 +334,19 @@ export async function syncDefaultChurches() {
       const q = query(churchesRef, where('id', '==', church.id))
       const snapshot = await getDocs(q)
       const payload = {
-        ...church,
+        id: church.id,
+        name: church.name,
+        address: church.address,
+        lat: church.lat,
+        lng: church.lng,
+        source: church.source || '',
         updatedAt: Timestamp.now()
       }
 
       if (snapshot.empty) {
         await addDoc(churchesRef, {
           ...payload,
+          schedules: getSeedSchedules(church.id),
           createdAt: Timestamp.now()
         })
         continue
@@ -247,9 +358,42 @@ export async function syncDefaultChurches() {
     }
 
     console.log(`${DEFAULT_CHURCHES.length} iglesias sincronizadas`)
+    writeStoredSeedSignature(getChurchSeedSignature())
     return DEFAULT_CHURCHES.length
   } catch (err) {
     console.error('Error sincronizando iglesias por defecto:', err)
+    throw err
+  }
+}
+
+/**
+ * Migrar los horarios por defecto al campo schedules en Firestore.
+ * Sobrescribe los horarios del documento con la versión semilla local.
+ * @returns {Promise<number>} Cantidad de iglesias actualizadas
+ */
+export async function syncDefaultSchedules() {
+  try {
+    console.log('Sincronizando horarios por defecto con Firestore...')
+    const churchesRef = collection(db, CHURCHES_COLLECTION)
+    let updated = 0
+
+    for (const church of DEFAULT_CHURCHES) {
+      const q = query(churchesRef, where('id', '==', church.id))
+      const snapshot = await getDocs(q)
+
+      for (const churchDoc of snapshot.docs) {
+        await updateDoc(churchDoc.ref, {
+          schedules: getSeedSchedules(church.id),
+          updatedAt: Timestamp.now()
+        })
+        updated += 1
+      }
+    }
+
+    console.log(`${updated} horarios sincronizados`)
+    return updated
+  } catch (err) {
+    console.error('Error sincronizando horarios por defecto:', err)
     throw err
   }
 }

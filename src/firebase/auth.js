@@ -1,65 +1,56 @@
-// Mock de autenticación para desarrollo
-// En producción, usar Firebase Auth
+import {
+  GoogleAuthProvider,
+  browserLocalPersistence,
+  onAuthStateChanged,
+  setPersistence,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut
+} from 'firebase/auth'
+import { auth } from './config'
 
 let currentUser = null
-let authListeners = []
 
-const ADMIN_CREDENTIALS = {
-  email: 'admin@iglesias.com',
-  password: 'admin123'
+function mapFirebaseUser(user) {
+  if (!user) return null
+
+  return {
+    uid: user.uid,
+    email: user.email,
+    displayName: user.displayName || 'Administrador',
+    photoURL: user.photoURL || ''
+  }
+}
+
+async function ensurePersistence() {
+  await setPersistence(auth, browserLocalPersistence)
 }
 
 export async function signInWithEmail(email, password) {
-  if (email === ADMIN_CREDENTIALS.email && password === ADMIN_CREDENTIALS.password) {
-    currentUser = {
-      uid: 'admin-user-1',
-      email: email,
-      displayName: 'Administrador'
-    }
-    notifyAuthListeners(currentUser)
-    localStorage.setItem('auth_user', JSON.stringify(currentUser))
-    return currentUser
-  }
-  throw new Error('Credenciales inválidas')
+  await ensurePersistence()
+  const credentials = await signInWithEmailAndPassword(auth, email, password)
+  currentUser = mapFirebaseUser(credentials.user)
+  return currentUser
 }
 
 export async function signInWithGoogle() {
-  // Mock de Google Sign-In
-  currentUser = {
-    uid: 'google-user-' + Date.now(),
-    email: 'user@gmail.com',
-    displayName: 'Usuario Google'
-  }
-  notifyAuthListeners(currentUser)
-  localStorage.setItem('auth_user', JSON.stringify(currentUser))
+  await ensurePersistence()
+  const provider = new GoogleAuthProvider()
+  const credentials = await signInWithPopup(auth, provider)
+  currentUser = mapFirebaseUser(credentials.user)
   return currentUser
 }
 
 export function onAuthStateChange(callback) {
-  authListeners.push(callback)
-  
-  // Verificar si hay usuario guardado
-  const stored = localStorage.getItem('auth_user')
-  if (stored) {
-    currentUser = JSON.parse(stored)
+  return onAuthStateChanged(auth, user => {
+    currentUser = mapFirebaseUser(user)
     callback(currentUser)
-  } else {
-    callback(null)
-  }
-  
-  return () => {
-    authListeners = authListeners.filter(listener => listener !== callback)
-  }
-}
-
-function notifyAuthListeners(user) {
-  authListeners.forEach(listener => listener(user))
+  })
 }
 
 export async function logoutAdmin() {
+  await signOut(auth)
   currentUser = null
-  localStorage.removeItem('auth_user')
-  notifyAuthListeners(null)
 }
 
 export function getCurrentUser() {
